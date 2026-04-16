@@ -1,0 +1,28 @@
+---
+title: "10A Sentiment Analysis Approach"
+author: "Ciara Bonnett-Jones"
+format: html
+editor: visual
+---
+
+## Introduction
+
+For this project, I am reproducing the sentiment analysis workflow from Chapter 2 of Text Mining with R to learn how to map emotional trajectories in text. I will start by replicating the textbook's analysis of Jane Austen. For my extension, I have chosen to analyze W.E.B Du Bois's The Souls of Black Folk (ID:408) using the `gutenbergr` package. I want to compare the emotional vocabulary of this 20th-century sociological work with the 19th-century fiction used in the base example.
+
+## Approach
+
+I am going to do this using the Tidy Text workflow we have been discussing. My process will follow these steps.
+
+I'll use the `unnest_tokens()` to break the text into individual words, following the "one-token-per-row" rule. This is called tokenization.
+
+I will use `inner_join()` to connect these words to the Bing lexicon (for positive/negative counts) and the NRC lexicon. This is sentiment joining.
+
+Then I will add the Loughran lexicon. This dictionary is often used for technical or financial text, and I want to see if it picks up on the specific language Du Bois uses regarding law and social structures that a standard "romance" lexicon might miss.
+
+## Possible Challenges
+
+-Sentiment lexicons often view words in isolation. I anticipate that Du Bois's complex descriptions of the Black experience might be "mis-read" by a simple binary lexicon.
+
+-I'll need to filter out the Project Gutenberg header and footer so that the legal "boilerplate" text does not interfere with the actual sentiment of the book.
+
+-Because this book was written in 1903, some vocabulary might be missing from modern sentiment dictionaries, which could lead to some data loss during the join.
