@@ -1,0 +1,43 @@
+---
+title: "Nobel Prize API Analysis: JSON Transformation"
+author: "Ciara Bonnett"
+format: html
+editor: visual
+---
+
+## Introduction 
+The Nobel Prize organization provides a public API that delivers data in JSON format regarding laureates and the prizes they have won. For this assignment, I will use R to interact with this API, retrieve structured data, and transform it into a tidy format for analysis. My goal is to investigate patterns in the backgrounds of winners and the distribution of prizes across different categories and time periods. 
+## Approach
+
+I will use `jsonlite` or `httr2`packages to "call" the Nobel Prize API. This allows me to pull the data directly into R without downloading a static file. 
+
+Because JSON data is "nested", I will use the `fromJSON()` function and `tidyr::unnest()` to flatten the data into a rectangular data frame.
+
+Once the data is tidy, I will use `dplyr` to filter and join the "Laureate" data with the "Prize" data.
+
+I have come up with four questions to guide my exploration, ranging from simple demographic counts to complex comparisons of birth country versus affiliation country.
+
+## Challenges
+
+The Nobel Prize API often has multiple "affiliations" or "prizes" for a single person. I anticipate that un-nesting these lists without creating duplicate rows will be the most difficult part of the cleaning process. 
+
+Some early Nobel winners may have missing data fields, such as "death date" or "organization city." I will need to handle these `NA` values carefully so they don't break my calculations.
+
+While the Nobel API is public, I need to ensure my code doesn't request the data too many times in a row, which could lead to a temporary block. I will save a local "cached" version of the data during the development phase.
+
+## Data Questions
+1. Which Nobel category has the highest average age for winners at the time of their award?
+
+2. What is the ratio of female to male winners in the "Hard Sciences" vs. "Peace/Literature"?
+
+3. How has the average number of laureates per prize changed over the decades?
+
+4. Which countries have the highest number of laureates who were born there but won their prize while affiliated with an institution in another country?
+
+## AI Usage 
+For this assignment, I used an AI collaborator (Gemini) to walk me through the foundational logic of  JSON APIs. Instead of just generating code, I focused on understanding the "why" behind the workflows:
+
+
+
+Nobel Prize JSON: We focused on the concept of "flattening" nested lists. I learned that JSON data is structured like nested boxes, and my job in R is to "un-nest" them into a tidy data frame without losing data.
+
