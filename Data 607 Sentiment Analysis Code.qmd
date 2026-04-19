@@ -1,0 +1,122 @@
+---
+title: "10A Sentiment Analysis Approach"
+author: "Ciara Bonnett-Jones"
+format: html
+editor: visual
+---
+
+## Introduction
+
+For this project, I am reproducing the sentiment analysis workflow from Chapter 2 of Text Mining with R to learn how to map emotional trajectories in text. I will start by replicating the textbook's analysis of Jane Austen. For my extension, I have chosen to analyze W.E.B Du Bois's The Souls of Black Folk (ID:408) using the `gutenbergr` package. I want to compare the emotional vocabulary of this 20th-century sociological work with the 19th-century fiction used in the base example.
+
+## Approach
+
+I am going to do this using the Tidy Text workflow we have been discussing. My process will follow these steps.
+
+I'll use the `unnest_tokens()` to break the text into individual words, following the "one-token-per-row" rule. This is called tokenization.
+
+I will use `inner_join()` to connect these words to the Bing lexicon (for positive/negative counts) and the NRC lexicon. This is sentiment joining.
+
+Then I will add the Loughran lexicon. This dictionary is often used for technical or financial text, and I want to see if it picks up on the specific language Du Bois uses regarding law and social structures that a standard "romance" lexicon might miss.
+
+## Possible Challenges
+
+-Sentiment lexicons often view words in isolation. I anticipate that Du Bois's complex descriptions of the Black experience might be "mis-read" by a simple binary lexicon.
+
+-I'll need to filter out the Project Gutenberg header and footer so that the legal "boilerplate" text does not interfere with the actual sentiment of the book.
+
+-Because this book was written in 1903, some vocabulary might be missing from modern sentiment dictionaries, which could lead to some data loss during the join.
+
+## Code
+ This code pulls the text here
+```{r}
+library(tidyverse)
+library(tidytext)
+library(gutenbergr)
+
+# Download 'The Souls of Black Folk' (ID: 408)
+dubois_raw <- gutenberg_download(408)
+
+# looking at the raw data structure
+head(dubois_raw)
+```
+
+This code cleans and removes
+```{r}
+dubois_tidy <- dubois_raw %>%
+  # Break sentences into individual words
+  unnest_tokens(word, text) %>%
+  # Remove 'stop words' 
+  anti_join(stop_words)
+# Lets see the most frequent words Du Bois used
+dubois_tidy %>%
+  count(word, sort = TRUE) %>% 
+  head(10)
+```
+
+This uses the Bing lexicon to label positive and negative words.
+```{r}
+# Join the book words with the sentiment dictionary
+dubois_sentiment <- dubois_tidy %>%
+  inner_join(get_sentiments("bing"))
+
+# See the top positive and negative words 
+dubois_sentiment %>% 
+  count(word, sentiment, sort = TRUE) %>%
+  group_by(sentiment) %>%
+  slice_max(n,n = 5)
+```
+
+Explanation of calculations
+```{r}
+dubois_arc <- dubois_sentiment %>%
+  mutate(index = row_number() %/% 80) %>%
+  count(index, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>%
+  mutate(sentiment_score = positive - negative)
+
+# Plot the Emotional Arc
+ggplot(dubois_arc, aes(x = index, y = sentiment_score)) +
+  geom_col(aes(fill = sentiment_score > 0)) +
+  scale_fill_manual(values = c("firebrick", "darkgreen"), guide = "none") +
+  theme_minimal() +
+  labs(title = "Sentiment Arc of 'The Souls of Black Folk'",
+       subtitle = "Positive vs. Negative sections through the book",
+       x = "Progress Through Book",
+       y = "Net Sentiment Score")
+```
+
+## Conclusion
+After doing all of this I was able to quantify the emotional weight of Du Bois' prose. 
+
+Using the Bing lexicon allowed for a clear binary look at the text, though it is important to note that academic and historical language sometimes carries nuances that a simple "positive/negative' dictionary might miss. 
+
+The visualization reveals a jagged emotional trajectory. This reflects the books structure moving between sociological analysis, personal sorrow and hopeful calls for justice. 
+
+This project shows that unnesting isn't just for JSON.
+
+## AI Usage Transcript: Sentiment Analysis of W.E.B. Du Bois
+
+Task: Transform raw text into a sentiment-scored visualization using the tidytext framework.
+
+1. Tokenization Strategy
+
+The Collaboration: I worked with the AI to understand the transition from "sentences" to "tokens." We discussed how unnest_tokens() acts as the text version of the unnest() function I used for JSON.
+
+The Logic: I prompted the AI to help me filter out "stop words." We realized that without removing common words like "the" or "and," the sentiment analysis would be skewed and the word counts would be meaningless.
+
+2. Relational Joins (The Lexicon)
+
+The Collaboration: I asked the AI how to "attach" emotions to words. The AI introduced the concept of an inner_join using the Bing Lexicon.
+
+The Logic: We walked through the logic of how R looks at my list of words and compares them to a dictionary, keeping only the matches. This allowed me to turn qualitative writing into quantitative data.
+
+3. Debugging & Visualization
+
+The Collaboration: When I wanted to show a "trajectory" or an "arc," the AI suggested using the integer division operator (%/%) to create "chunks" or "index" points for the book.
+
+The Logic: I worked with the AI to refine the ggplot2 code, specifically using a logical statement (fill = sentiment_score > 0) to color-code the "Positive" sections green and "Negative" sections red. This made the emotional "rollercoaster" of the book immediately visible to the reader.
+
+4. Reflection on AI Assistance
+
+The AI served as a technical consultant for the tidytext syntax. While I provided the direction (analyzing Du Bois' narrative arc), the AI helped me write more resilient code for the pivot_wider() step to ensure that sections with zero sentiment wouldn't break the final calculation.
