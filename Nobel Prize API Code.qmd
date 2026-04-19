@@ -1,0 +1,191 @@
+---
+title: "Nobel Prize API Analysis: JSON Transformation"
+author: "Ciara Bonnett"
+format: html
+editor: visual
+---
+
+## Introduction 
+The Nobel Prize organization provides a public API that delivers data in JSON format regarding laureates and the prizes they have won. For this assignment, I will use R to interact with this API, retrieve structured data, and transform it into a tidy format for analysis. My goal is to investigate patterns in the backgrounds of winners and the distribution of prizes across different categories and time periods. 
+
+## Approach
+
+I will use `jsonlite` or `httr2`packages to "call" the Nobel Prize API. This allows me to pull the data directly into R without downloading a static file. 
+
+Because JSON data is "nested", I will use the `fromJSON()` function and `tidyr::unnest()` to flatten the data into a rectangular data frame.
+
+Once the data is tidy, I will use `dplyr` to filter and join the "Laureate" data with the "Prize" data.
+
+I have come up with four questions to guide my exploration, ranging from simple demographic counts to complex comparisons of birth country versus affiliation country.
+
+## Challenges
+
+The Nobel Prize API often has multiple "affiliations" or "prizes" for a single person. I anticipate that un-nesting these lists without creating duplicate rows will be the most difficult part of the cleaning process. 
+
+Some early Nobel winners may have missing data fields, such as "death date" or "organization city." I will need to handle these `NA` values carefully so they don't break my calculations.
+
+While the Nobel API is public, I need to ensure my code doesn't request the data too many times in a row, which could lead to a temporary block. I will save a local "cached" version of the data during the development phase.
+
+## Data Questions
+1. Which Nobel category has the highest average age for winners at the time of their award?
+
+2. What is the ratio of female to male winners in the "Hard Sciences" vs. "Peace/Literature"?
+
+3. How has the average number of laureates per prize changed over the decades?
+
+4. Which countries have the highest number of laureates who were born there but won their prize while affiliated with an institution in another country?
+
+
+## Code 
+```{r}
+library(jsonlite)
+library(tidyverse)
+
+# The URL for the Laureate API
+url <- "https://api.nobelprize.org/2.1/laureates"
+
+# This pulls the data and converts the JSON into an R list
+raw_data <- fromJSON(url)
+
+# Let's see what the "boxes look like
+names(raw_data)
+```
+```{r}
+# Extract the main data frame
+laureates_df <- raw_data$laureates %>% as_tibble()
+
+# Look at the 'nobelPrizes' column
+# Notice it looks like <df[,13]> -- thats a "List-Column"
+head(laureates_df$nobelPrizes)
+
+# Explode the prizes so each prize gets its own row
+laureates_unnested <- laureates_df %>%
+  unnest(nobelPrizes, names_sep = "_")
+
+# "Flatten" the names and dates so they are not trapped in lists
+laureates_final <- jsonlite::flatten(laureates_unnested)
+
+# Clean columns
+colnames(laureates_final)
+```
+## Answer 1 
+# Calculating the age of each laureate at the time they received the award by subtracting their birth year from the award year.
+
+```{r}
+# Create the age analysis data
+age_results <- laureates_final %>%
+  # Select the columns we need
+  select(
+    name = knownName.en,
+    category = nobelPrizes_category.en,
+    birth.date = birth.date,
+    award_year = nobelPrizes_awardYear
+  ) %>%
+  
+  # Extract the year from the birth date
+  mutate(
+    birth_year = as.numeric(str_extract(birth.date, "\\d{4}")),
+    award_year = as.numeric(award_year),
+    age_at_award = award_year - birth_year
+  ) %>%
+  
+  # Drop rows where we don't have a birth year
+  filter(!is.na(age_at_award))
+# Summarize the average age for each category
+age_summary <- age_results %>%
+  group_by(category) %>%
+  summarize(avg_age = mean(age_at_award)) %>%
+  arrange(desc(avg_age))
+
+# Display the table
+age_summary
+```
+## Answer 2
+```{r}
+# Create a count of gender per category
+gender_analysis <- laureates_final %>%
+  # Remove organizations 
+  filter(gender %in% c("male", "female")) %>%
+  group_by(nobelPrizes_category.en, gender) %>%
+  summarize(count = n(), .groups = 'drop')
+
+# Pivot the data so male and female are side-by-side
+gender_table <- gender_analysis %>%
+  pivot_wider(names_from = gender, values_from = count, values_fill = 0) %>%
+  mutate(total = female + male, 
+         percent_female = (female / total) * 100)
+
+# Display the result
+gender_table
+```
+## Answer 3
+```{r}
+# Count how many peole shared a prize in a given year/category
+sharing_analysis <- laureates_final %>%
+  group_by(nobelPrizes_awardYear, nobelPrizes_category.en) %>%
+  summarize(laureates_per_prize = n(), .groups = 'drop')
+
+# See the average number of winners per prize over time
+sharing_trends <- sharing_analysis %>%
+  mutate(decade = as.numeric(nobelPrizes_awardYear) %/% 10 * 10) %>%
+  group_by(decade) %>%
+  summarize(avg_sharing = mean(laureates_per_prize))
+            
+# Create a quick plot to see the trend
+ggplot(sharing_trends, aes(x = decade, y = avg_sharing)) +
+  geom_line(color = "firebrick", size = 1) + 
+  geom_point() +
+  labs(title = "Is the Nobel Prize Becoming More 'Shared'?", 
+       subtitle = "Average number of laureates per prize by decade",
+       x = "Decade",
+       y = "Avg. Number of Winners")
+```
+
+## Answer 4 
+```{r}
+# 1. Unnest and Flatten
+brain_drain_data <- laureates_unnested %>%
+  unnest(nobelPrizes_affiliations, names_sep = "_", keep_empty = TRUE) %>%
+  jsonlite::flatten()
+
+# 2. Use a flexible select
+brain_drain_clean <- brain_drain_data %>%
+  select(
+    name = knownName.en,
+    birth_country = birth.place.country.en,
+    # This searches for the column instead of guessing the exact name
+    work_country = matches("affiliations.*country.en") 
+  ) %>%
+  # 3. Filter for migration
+  filter(!is.na(birth_country), !is.na(work_country)) %>%
+  mutate(is_migration = ifelse(birth_country != work_country, "Migrated", "Stayed"))
+
+# 4. Final Summary
+brain_drain_summary <- brain_drain_clean %>%
+  filter(is_migration == "Migrated") %>%
+  group_by(birth_country) %>%
+  summarize(laureates_exported = n()) %>%
+  arrange(desc(laureates_exported))
+
+head(brain_drain_summary)
+```
+
+## Conclusions
+After successfully transforming the complex JSON data from the Nobel Prize API into a tidy format. I revealed that categories like Physiology or Medicine tend to have older winners due to the long-term nature of scientific verification. 
+
+The gender gap data shows a significant historical gender imbalance, particularly in the "Hard Sciences" compares to Peace or Literature. 
+
+There is no clear upward trend in prize sharing, indicating that global scientific breakthroughs are becoming more collaborative over time.
+
+The brain drain analysis highlighted how laureates often move from their birth countries to international hubs for their research.
+
+My biggest challenge was the unnesting. Handling list-columns required an approach that took strategy to avoid data loss while ensuring everything was accounted for. 
+
+
+## AI Usage 
+For this assignment, I used an AI collaborator (Gemini) to walk me through the foundational logic of  JSON APIs. Instead of just generating code, I focused on understanding the "why" behind the workflows:
+
+
+
+Nobel Prize JSON: We focused on the concept of "flattening" nested lists. I learned that JSON data is structured like nested boxes, and my job in R is to "un-nest" them into a tidy data frame without losing data.
+
